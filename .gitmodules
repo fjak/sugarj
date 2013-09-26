@@ -1,0 +1,6 @@
+[submodule "language-libraries/scala"]
+	path = language-libraries/scala
+	url = git@github.com:fjak/lang-scala.git
+[submodule "case-studies/test-scala"]
+	path = case-studies/test-scala
+	url = git@github.com:fjak/test-scala.git
