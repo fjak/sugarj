@@ -4,3 +4,6 @@
 [submodule "case-studies/test-scala"]
 	path = case-studies/test-scala
 	url = git@github.com:fjak/test-scala.git
+[submodule "case-studies/scala-xml"]
+	path = case-studies/scala-xml
+	url = git@github.com:fjak/scala-xml.git
