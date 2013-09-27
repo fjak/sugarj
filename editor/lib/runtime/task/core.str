@@ -25,11 +25,13 @@ rules // Creation
   //tdebug(s) = debug(s)
   
   new-task(|partition) = new-task(|partition, <dependent-tasks>)
-  new-task(|partition, dependencies) = 
-  		task-is-combinator; task-add-combinator(|partition, dependencies, <id>) 
-  	<+ 
-  		task-add-task(|partition, dependencies, <id>)
-   
+  new-task(|partition, dependencies):
+  	instruction -> result
+  	with
+  		is-combinator := <task-is-combinator; !1 <+ !0> instruction;
+  		short-circuit := <task-short-circuit; !1 <+ !0> instruction;
+  		result := <task-add-task(|partition, dependencies, instruction, is-combinator, short-circuit)> instruction
+ 
   //    tdebug(!"new task ")
   //  ; avoid-task(|dependencies)
   //  ; tdebug(!"avoided ")
@@ -40,6 +42,19 @@ rules // Creation
   dependent-task = ?Result(<id>) 
   dependent-task =
     has-annos; get-annos; dependent-tasks
+    
+	task-create-execute-ctx = !""
+	task-create-execute(create-task):
+		term -> result
+		with
+		  ctx := <task-create-execute-ctx>
+		; task-push
+		; task-start-collection(|ctx)
+		; Result(taskID) := <create-task> term
+		; task-stop-collection(|ctx)
+		; <task-evaluate-now> taskID
+		; result := <task-get-result> taskID
+		; task-pop
 
 rules // Dependencies
 	
@@ -63,9 +78,14 @@ rules // Results
 
 	insert-results-hashmap(|results-hashmap) =
 		switch id
-			case has-annos  : !(<id>, <get-annos; insert-results-hashmap(|results-hashmap)>); set-annos
+			case has-annos  : ?t; !(<insert-results-hashmap-noannos(|results-hashmap)> t, <get-annos; insert-results-hashmap(|results-hashmap)> t); set-annos
+			otherwise       : insert-results-hashmap-noannos(|results-hashmap)
+		end
+		
+	insert-results-hashmap-noannos(|results-hashmap) =
+		switch id
 			case is-list    : filter(insert-results-hashmap(|results-hashmap))
-			case ?Result(n) : (<hashtable-get(|n)> results-hashmap) <+ <with(fail|"Cannot insert result: ")> n
+			case ?Result(n) : try(<hashtable-get(|n)> results-hashmap)
 			otherwise       : all(insert-results-hashmap(|results-hashmap))
 		end
 	
@@ -103,14 +123,13 @@ rules // Projections
 
 rules // API
 	
-	task-add-combinator(|partition, dependencies, instruction) = task-api-add-combinator(|partition, dependencies, instruction)
 	task-add-message(|taskID, message)                         = task-api-add-message(|taskID, message)
-	task-add-task(|partition, dependencies, instruction)       = task-api-add-task(|partition, dependencies, instruction)
+	task-add-task(|partition, dependencies, instruction, isCombinator, shortCircuit) = task-api-add-task(|partition, dependencies, instruction, isCombinator, shortCircuit)
 	task-becomes-cyclic(|taskIDFrom, taskIDTo)                 = task-api-becomes-cyclic(|taskIDFrom, taskIDTo)
 	task-clear-partition                                       = task-api-clear-partition(|<id>)
 	task-debug-info(|partition)                                = task-api-debug-info(|partition)
-	task-evaluate-now                                          = task-api-evaluate-now(insert-results-hashmap, task-perform-task|<id>)
-	task-evaluate-scheduled                                    = task-api-evaluate-scheduled(insert-results-hashmap, task-perform-task)
+	task-evaluate-now                                          = task-api-evaluate-now(task-collect-result-ids, insert-results-hashmap, task-perform-task|<id>)
+	task-evaluate-scheduled                                    = task-api-evaluate-scheduled(task-collect-result-ids, insert-results-hashmap, task-perform-task)
 	task-exists(|instruction)                                  = task-api-exists(|instruction)
 	task-get-messages(|partition)                              = task-api-get-messages(|partition)
 	task-get-readers                                           = task-api-get-readers(|<id>)
@@ -122,6 +141,7 @@ rules // API
 	task-push                                                  = task-api-push
 	task-recover                                               = task-api-recover
 	task-reset                                                 = task-api-reset
+	task-result-combinations                                   = task-api-result-combinations(task-collect-result-ids, insert-results-hashmap|<id>)
 	task-setup(|project-path)                                  = task-api-setup(|project-path)
 	task-setup                                                 = task-api-setup(|<id>)
 	task-start-collection(|partition)                          = task-api-start-collection(|partition)
@@ -167,16 +187,15 @@ rules // API
 
 rules /** @internal API externals */
 
-	task-api-add-combinator(|partition, dependencies, instruction) = prim("task_api_add_combinator", partition, dependencies, instruction)
 	task-api-add-dependency(|taskID, dependency) = prim("task_api_add_dependency", taskID, dependency)
 	task-api-add-message(|taskID, message) = prim("task_api_add_message", taskID, message)
 	task-api-add-read(|taskID, read) = prim("task_api_add_read", taskID, read)
-	task-api-add-task(|partition, dependencies, instruction) = prim("task_api_add_task", partition, dependencies, instruction)
+	task-api-add-task(|partition, dependencies, instruction, isCombinator, shortCircuit) = prim("task_api_add_task", partition, dependencies, instruction, isCombinator, shortCircuit)
 	task-api-becomes-cyclic(|taskIDFrom, taskIDTo) = prim("task_api_becomes_cyclic", taskIDFrom, taskIDTo)
 	task-api-clear-partition(|partition) = prim("task_api_clear_partition", partition)
 	task-api-debug-info(|partition) = prim("task_api_debug_info", partition)
-	task-api-evaluate-now(insert, perform|taskIDs) = prim("task_api_evaluate_now", insert, perform|taskIDs)
-	task-api-evaluate-scheduled(insert, perform|) = prim("task_api_evaluate_scheduled", insert, perform|)
+	task-api-evaluate-now(collect, insert, perform|taskIDs) = prim("task_api_evaluate_now", collect, insert, perform|taskIDs)
+	task-api-evaluate-scheduled(collect, insert, perform|) = prim("task_api_evaluate_scheduled", collect, insert, perform|)
 	task-api-exists(|instruction) = prim("task_api_exists", instruction)
 	task-api-get-dependencies(|taskID) = prim("task_api_get_dependencies", taskID)
 	task-api-get-messages(|partition) = prim("task_api_get_messages", partition)
@@ -191,6 +210,7 @@ rules /** @internal API externals */
 	task-api-push = prim("task_api_push")
 	task-api-recover = prim("task_api_recover")
 	task-api-reset = prim("task_api_reset")
+	task-api-result-combinations(collect-results, insert-results|term) = prim("task_api_result_combinations", collect-results, insert-results|term)
 	task-api-setup(|project-path) = prim("task_api_setup", project-path)
 	task-api-start-collection(|partition) = prim("task_api_start_collection", partition)
 	task-api-stop-collection(|partition) = prim("task_api_stop_collection", partition)

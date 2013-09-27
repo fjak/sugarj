@@ -6,3 +6,5 @@ strategies
   task-match         = fail
   avoid-task(|dep*)  = fail
   task-is-combinator = fail
+  task-short-circuit = fail
+
